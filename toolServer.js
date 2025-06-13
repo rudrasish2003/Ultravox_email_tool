@@ -1,6 +1,6 @@
 const express = require('express');
 const dotenv = require('dotenv');
-const sendgridMail = require('@sendgrid/mail');
+const nodemailer = require('nodemailer');
 
 // Load environment variables from .env file
 dotenv.config();
@@ -8,35 +8,42 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Middleware to parse JSON request bodies
+// Parse JSON request bodies
 app.use(express.json());
 
-// Configure SendGrid API key
-sendgridMail.setApiKey(process.env.SENDGRID_API_KEY);
-
-// ✅ Simple email format validator
+// ✅ Email format validator
 const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
-// Health check (optional)
+// Health check endpoint
 app.get('/', (req, res) => {
-  res.send('✅ Ultravox email tool server is running.');
+  res.send('✅ SMTP tool server is running.');
 });
 
-// Tool endpoint for Ultravox agent
+// Create SMTP transporter with Gmail
+const transporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST,          // e.g. smtp.gmail.com
+  port: Number(process.env.SMTP_PORT),  // e.g. 465
+  secure: process.env.SMTP_SECURE === 'true', // true for SSL (465), false for TLS (587)
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS,
+  },
+});
+
+// Endpoint to send email
 app.post('/tools/email', async (req, res) => {
   const { email } = req.body;
 
-  // Validate input
   if (!isValidEmail(email)) {
     return res.status(400).json({ status: 'error', message: 'Invalid email format.' });
   }
 
-  // ✅ Respond early to prevent Ultravox timeout
+  // Early response to Ultravox
   res.status(200).json({ status: 'queued', email });
 
-  const msg = {
+  const mailOptions = {
+    from: `"RecruitAI - FedEx" <${process.env.SMTP_USER}>`,
     to: email,
-    from: process.env.FROM_EMAIL, // ✅ Must be verified in SendGrid
     subject: 'Verify your email for FedEx Job Screening',
     html: `
       <p>Hello,</p>
@@ -46,14 +53,14 @@ app.post('/tools/email', async (req, res) => {
   };
 
   try {
-    await sendgridMail.send(msg);
-    console.log(`✅ Verification email sent to: ${email}`);
+    await transporter.sendMail(mailOptions);
+    console.log(`📤 Verification email sent to: ${email}`);
   } catch (error) {
-    console.error('❌ SendGrid error:', error.response?.body || error.message);
+    console.error('❌ SMTP error:', error.message || error);
   }
 });
 
 // Start the server
 app.listen(PORT, () => {
-  console.log(`🚀 Tool server is running on http://localhost:${PORT}`);
+  console.log(`🚀 Tool server is running at http://localhost:${PORT}`);
 });
